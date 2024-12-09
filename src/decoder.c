@@ -22,7 +22,16 @@ DecoderContext* decoder_create(const uint8_t* code, size_t size) {
 }
 
 void decoder_destroy(DecoderContext* context) {
+    if (!context) return;
+    
+    /* Note: code_buffer is const and not owned by the decoder,
+     * so we don't free it. If any dynamically allocated members
+     * are added to DecoderContext in the future, free them here
+     * before freeing the context itself.
+     */
+    
     free(context);
+    /* Context is freed and should not be used after this point :) */
 }
 
 uint32_t decoder_extract_bits(uint32_t instruction, uint8_t start, uint8_t length) {
