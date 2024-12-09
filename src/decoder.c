@@ -12,6 +12,7 @@
 #define CLASS_FP_AND_SIMD          0x04000000
 
 DecoderContext* decoder_create(const uint8_t* code, size_t size) {
+    if (!code) return NULL;
     DecoderContext* ctx = (DecoderContext*)calloc(1, sizeof(DecoderContext));
     if (!ctx) return NULL;
     ctx->code_buffer = code;
@@ -38,7 +39,9 @@ uint32_t decoder_extract_bits(uint32_t instruction, uint8_t start, uint8_t lengt
     return EXTRACT_BITS(instruction, start, length);
 }
 
-static bool decode_data_processing_immediate(uint32_t inst, Instruction* decoded) {
+static DecoderError decode_data_processing_immediate(uint32_t inst, Instruction* decoded) {
+    if (!decoded) return DECODER_ERROR_NULL_PARAM;
+    
     uint32_t op0 = decoder_extract_bits(inst, 23, 3);
     uint32_t op1 = decoder_extract_bits(inst, 30, 2);
     
@@ -60,12 +63,12 @@ static bool decode_data_processing_immediate(uint32_t inst, Instruction* decoded
             .value.reg = decoder_extract_bits(inst, 5, 5)
         };
         instruction_set_operand(decoded, 1, reg_op);
-        return true;
+        return DECODER_SUCCESS;
     }
-    return false;
+    return DECODER_ERROR_INVALID_INSTRUCTION;
 }
 
-static bool decode_branches(uint32_t inst, Instruction* decoded) {
+static DecoderError decode_branches(uint32_t inst, Instruction* decoded) {
     uint32_t op0 = decoder_extract_bits(inst, 29, 3);
     decoded->type = INST_BRANCH;
     
@@ -80,7 +83,7 @@ static bool decode_branches(uint32_t inst, Instruction* decoded) {
             .value.immediate = imm26 << 2
         };
         instruction_set_operand(decoded, 0, target);
-        return true;
+        return DECODER_SUCCESS;
     }
     
     if (op0 == 0x2) {
@@ -95,12 +98,12 @@ static bool decode_branches(uint32_t inst, Instruction* decoded) {
             .value.immediate = imm19 << 2
         };
         instruction_set_operand(decoded, 0, target);
-        return true;
+        return DECODER_SUCCESS;
     }
-    return false;
+    return DECODER_ERROR_INVALID_INSTRUCTION;
 }
 
-static bool decode_loads_stores(uint32_t inst, Instruction* decoded) {
+static DecoderError decode_loads_stores(uint32_t inst, Instruction* decoded) {
     uint32_t size = decoder_extract_bits(inst, 30, 2);
     uint32_t op = decoder_extract_bits(inst, 22, 2);
     decoded->type = INST_LOAD_STORE;
@@ -120,59 +123,64 @@ static bool decode_loads_stores(uint32_t inst, Instruction* decoded) {
             }
         };
         instruction_set_operand(decoded, 0, mem);
-        return true;
+        return DECODER_SUCCESS;
     }
-    return false;
+    return DECODER_ERROR_INVALID_INSTRUCTION;
 }
 
-bool decoder_decode_next(DecoderContext* context, Instruction* inst) {
-    if (!context || !inst || context->pc >= context->buffer_size) {
-        return false;
-    }
+DecoderError decoder_decode_next(DecoderContext* context, Instruction* inst) {
+    if (!context || !inst) return DECODER_ERROR_NULL_PARAM;
+    if (context->pc >= context->buffer_size) return DECODER_ERROR_BUFFER_OVERFLOW;
     
     uint32_t raw_inst;
     memcpy(&raw_inst, context->code_buffer + context->pc, sizeof(raw_inst));
     instruction_init(inst);
     inst->raw = raw_inst;
-    bool success = false;
+    DecoderError result = DECODER_ERROR_INVALID_INSTRUCTION;
     
     if ((raw_inst & 0x1F000000) == CLASS_DATA_PROCESSING_IMM) {
-        success = decode_data_processing_immediate(raw_inst, inst);
+        result = decode_data_processing_immediate(raw_inst, inst);
     } else if ((raw_inst & 0x1C000000) == CLASS_BRANCHES) {
-        success = decode_branches(raw_inst, inst);
+        result = decode_branches(raw_inst, inst);
     } else if ((raw_inst & 0x0A000000) == CLASS_LOADS_STORES) {
-        success = decode_loads_stores(raw_inst, inst);
+        result = decode_loads_stores(raw_inst, inst);
     }
     
-    if (success) {
+    if (result == DECODER_SUCCESS) {
         context->pc += 4;
     }
-    return success;
+    return result;
 }
 
-bool decoder_decode_at(DecoderContext* context, uint64_t address, Instruction* inst) {
-    if (!context || !inst || address >= context->buffer_size) {
-        return false;
-    }
+DecoderError decoder_decode_at(DecoderContext* context, uint64_t address, Instruction* inst) {
+    if (!context || !inst) return DECODER_ERROR_NULL_PARAM;
+    if (address >= context->buffer_size) return DECODER_ERROR_INVALID_ADDRESS;
+    
     uint64_t old_pc = context->pc;
     context->pc = address;
-    bool result = decoder_decode_next(context, inst);
+    DecoderError result = decoder_decode_next(context, inst);
     context->pc = old_pc;
     return result;
 }
 
-size_t decoder_decode_block(DecoderContext* context, Instruction* insts, size_t max_count) {
-    if (!context || !insts || !max_count) {
-        return 0;
-    }
-    size_t count = 0;
-    while (count < max_count && decoder_decode_next(context, &insts[count])) {
-        count++;
-        if (instruction_is_branch(&insts[count - 1])) {
+DecoderError decoder_decode_block(DecoderContext* context, Instruction* insts, size_t max_count, size_t* decoded_count) {
+    if (!context || !insts || !decoded_count) return DECODER_ERROR_NULL_PARAM;
+    if (!max_count) return DECODER_SUCCESS;
+    
+    *decoded_count = 0;
+    DecoderError result;
+    
+    while (*decoded_count < max_count) {
+        result = decoder_decode_next(context, &insts[*decoded_count]);
+        if (result != DECODER_SUCCESS) {
+            return (*decoded_count > 0) ? DECODER_SUCCESS : result;
+        }
+        (*decoded_count)++;
+        if (instruction_is_branch(&insts[*decoded_count - 1])) {
             break;
         }
     }
-    return count;
+    return DECODER_SUCCESS;
 }
 
 bool decoder_is_valid_instruction(uint32_t raw_instruction) {
@@ -192,14 +200,19 @@ bool decoder_can_fallthrough(const Instruction* inst) {
     return true;
 }
 
-uint64_t decoder_get_next_pc(const DecoderContext* context, const Instruction* inst) {
-    if (!context || !inst) return 0;
+DecoderError decoder_get_next_pc(const DecoderContext* context, const Instruction* inst, uint64_t* next_pc) {
+    if (!context || !inst || !next_pc) return DECODER_ERROR_NULL_PARAM;
+    
     if (!instruction_is_branch(inst)) {
-        return context->pc + 4;
+        *next_pc = context->pc + 4;
+        return DECODER_SUCCESS;
     }
+    
     uint64_t target = instruction_get_branch_target(inst, context->pc);
-    if (target != 0) {
-        return target;
+    if (target == 0) {
+        *next_pc = context->pc + 4;
+    } else {
+        *next_pc = target;
     }
-    return context->pc + 4;
+    return DECODER_SUCCESS;
 } 
