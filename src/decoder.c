@@ -2,7 +2,7 @@
 #include <stdlib.h>
 #include <string.h>
 
-#define MASK_BITS(start, length) (((1ULL << (length)) - 1) << (start))
+#define MASK_BITS(low, high) ((((1ULL << ((high) - (low) + 1)) - 1)) << (low))
 #define EXTRACT_BITS(value, start, length) ((value >> start) & ((1ULL << length) - 1))
 
 #define CLASS_DATA_PROCESSING_IMM   0x11000000
