@@ -41,26 +41,67 @@ typedef enum RegisterResult {
 #define ARM64_REG_X26 26
 #define ARM64_REG_X27 27
 #define ARM64_REG_X28 28
-#define ARM64_REG_X29 29
-#define ARM64_REG_X30 30
-#define ARM64_REG_X31 31 
-#define ARM64_REG_SP  31
-#define ARM64_REG_PC  32
-#define ARM64_REG_NZCV 33
+#define ARM64_REG_X29 29  
+#define ARM64_REG_X30 30  
+#define ARM64_REG_X31 31  
+
+#define ARM64_REG_W0  ARM64_REG_X0
+#define ARM64_REG_W1  ARM64_REG_X1
+#define ARM64_REG_W2  ARM64_REG_X2
+#define ARM64_REG_W3  ARM64_REG_X3
+#define ARM64_REG_W4  ARM64_REG_X4
+#define ARM64_REG_W5  ARM64_REG_X5
+#define ARM64_REG_W6  ARM64_REG_X6
+#define ARM64_REG_W7  ARM64_REG_X7
+#define ARM64_REG_W8  ARM64_REG_X8
+#define ARM64_REG_W9  ARM64_REG_X9
+#define ARM64_REG_W10 ARM64_REG_X10
+#define ARM64_REG_W11 ARM64_REG_X11
+#define ARM64_REG_W12 ARM64_REG_X12
+#define ARM64_REG_W13 ARM64_REG_X13
+#define ARM64_REG_W14 ARM64_REG_X14
+#define ARM64_REG_W15 ARM64_REG_X15
+#define ARM64_REG_W16 ARM64_REG_X16
+#define ARM64_REG_W17 ARM64_REG_X17
+#define ARM64_REG_W18 ARM64_REG_X18
+#define ARM64_REG_W19 ARM64_REG_X19
+#define ARM64_REG_W20 ARM64_REG_X20
+#define ARM64_REG_W21 ARM64_REG_X21
+#define ARM64_REG_W22 ARM64_REG_X22
+#define ARM64_REG_W23 ARM64_REG_X23
+#define ARM64_REG_W24 ARM64_REG_X24
+#define ARM64_REG_W25 ARM64_REG_X25
+#define ARM64_REG_W26 ARM64_REG_X26
+#define ARM64_REG_W27 ARM64_REG_X27
+#define ARM64_REG_W28 ARM64_REG_X28
+#define ARM64_REG_W29 ARM64_REG_X29
+#define ARM64_REG_W30 ARM64_REG_X30
+
+#define ARM64_REG_SP   31  
+#define ARM64_REG_WSP  31  
+#define ARM64_REG_PC   32  
+#define ARM64_REG_NZCV 33  
 
 #define ARM64_NUM_REGS 34
 #define ARM64_NUM_VECTOR_REGS 32
 
 typedef struct RegisterFile {
-    uint64_t x[ARM64_NUM_REGS];
+    uint64_t x[ARM64_NUM_REGS];  
     uint8_t v[ARM64_NUM_VECTOR_REGS][16];
-    uint32_t fpsr;
-    uint32_t fpcr;
+    uint32_t fpsr;  
+    uint32_t fpcr; 
 } RegisterFile;
 
 RegisterFile* registers_create(void);
 void registers_destroy(RegisterFile* regs);
 void registers_reset(RegisterFile* regs);
+
+/* 
+ * For W registers:
+ * Reading returns the lower 32 bits of the corresponding X register
+ * Writing zero-extends the value and only modifies the lower 32 bits
+ * The upper 32 bits of the X register are preserved on W register writes
+ */
 
 RegisterResult registers_get_x(const RegisterFile* regs, uint8_t reg, uint64_t* value);
 RegisterResult registers_set_x(RegisterFile* regs, uint8_t reg, uint64_t value);

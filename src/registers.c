@@ -172,18 +172,32 @@ void registers_print_state(const RegisterFile* regs) {
     
     printf("Register State:\n");
     for (int i = 0; i < 31; i++) {
-        printf("X%-2d: 0x%016lx", i, regs->x[i]);
+        printf("X%-2d: 0x%016lx  W%-2d: 0x%08x", 
+               i, regs->x[i], 
+               i, (uint32_t)regs->x[i]);
         if (i % 2 == 1) printf("\n");
-        else printf("  ");
+        else printf("    ");
     }
     
     uint64_t sp, pc;
     registers_get_sp(regs, &sp);
     registers_get_pc(regs, &pc);
-    printf("SP:  0x%016lx  PC:  0x%016lx\n", sp, pc);
+    printf("\nSP:  0x%016lx  WSP: 0x%08x\n", sp, (uint32_t)sp);
+    printf("PC:  0x%016lx\n", pc);
     
     printf("NZCV: [N=%d Z=%d C=%d V=%d]\n",
            registers_get_flag_n(regs), registers_get_flag_z(regs),
            registers_get_flag_c(regs), registers_get_flag_v(regs));
     printf("FPSR: 0x%08x  FPCR: 0x%08x\n", regs->fpsr, regs->fpcr);
+    
+    printf("\nVector Registers (preview):\n");
+    for (int i = 0; i < 4; i++) {
+        printf("V%-2d: ", i);
+        for (int j = 15; j >= 0; j--) {
+            printf("%02x", regs->v[i][j]);
+            if (j % 8 == 0) printf(" ");
+        }
+        printf("\n");
+    }
+    printf("... (use registers_get_vector for full vector state)\n");
 } 
